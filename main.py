@@ -1,49 +1,67 @@
 import time
+import os
 
 import socket
 from multiprocessing import Process, Queue
 from threading import Thread
 
-def connect_server(q):
-    HOST = "localhost"
-    PORT = 8899
 
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((HOST, PORT))
+def connect_server(q):  #서버와 연결
+    HOST = "192.168.0.55"
+    PORT = 9855
+                    #소켓 객체를 생성 #IP4v에 사용되는 소캣 패밀리 #소켓 타입
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  #(family=,type=)
+    client_socket.connect((HOST, PORT)) #소켓 연결
 
     while True:
         # client_socket.send("hello3".encode())
         # print("hello4")
 
-        if q.empty():
+        if q.empty():       #multi thread 를 사용 하여 q에 데이터를   받을 때까지 무한루프
             continue
 
-        data = q.get()
+        data = q.get()      #만약 q에 데이터가 있다면 q의 데이터를 get하여 data에 넣는다.
         client_socket.send(data.encode())
+
 
 
     client_socket.close()
 
-def handle_client(client_socket, addr, q):
+def handle_client(client_socket, addr, q, file_cnt):  #A->GATE
     print("Client address : ", addr)
+
+    # 디렉토리 만들기
+    dirname = os.getcwd() + '\Read_value'
+
+    if not os.path.exists(dirname):
+        os.mkdir(dirname)
 
     while True:
         recv_data = client_socket.recv(1024).decode()
         print("Receive data : ", recv_data)
 
-        # send to server
+        #파일에 데이터 저장
+        name = str(os.getcwd()) + '\Read_value\data' + str(file_cnt)+ '.txt'
+        if not os.path.exists(name):
+            f = open(name, 'w')  # 파일의 생성
+            f.close()
+        f=open(name, 'a')
+        f.write(recv_data)    # send to server
+
         q.put(recv_data)
         # print("jellow")
         # q.put("hello1")
 
         time.sleep(1)
 
+    f.close()
     client_socket.close()
 
 
-def create_gateway(q):
+
+def create_gateway(q, file_cnt):  #아두이노와 연결
     HOST = ""
-    PORT = 8989
+    PORT = 8877
 
     # with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
     #     server_socket.bind((HOST, PORT))  # 주소 바인딩
@@ -73,7 +91,9 @@ def create_gateway(q):
         except:
             gateway_socket.close()
 
-        client_thread = Thread(target=handle_client, args=(client_socket, addr, q))
+        file_cnt+=1
+
+        client_thread = Thread(target=handle_client, args=(client_socket, addr, q, file_cnt))
         client_thread.daemon = True
         client_thread.start()
 
@@ -83,9 +103,11 @@ if __name__ == "__main__":
 
     process_list = []
 
+    file_cnt = 0
+
     # Create multi processing
     process_connect_server = Process(target=connect_server, args=(q,))
-    process_create_gateway = Process(target=create_gateway, args=(q,))
+    process_create_gateway = Process(target=create_gateway, args=(q, file_cnt))
 
     process_list.append(process_connect_server)
     process_list.append(process_create_gateway)
